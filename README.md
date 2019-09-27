@@ -6,7 +6,7 @@ For more information about adding request headers to GET requests in S3, see the
 
 ### Requirements
 
-This component uses the hmac() function introduced in Adobe ColdFusion 10. It will not work with earlier versions of Adobe ColdFusion, though you are welcome to provide your own hmac() implementation to get it to work with earlier versions of Adobe ColdFusion.
+This component relies on version 1.11.x (or later) of the [AWS Java SDK](https://aws.amazon.com/sdk-for-java/). It will not work with version 2 of the AWS Java SDK. Please review this blog post to find out [how to add the AWS Java SDK to your ColdFusion instance](https://brianklaas.net/aws/coldfusion/2018/12/10/Update-On-Using-AWS-Java-SDK-With-ColdFusion-2018.html).
 
 #### Methods
 
