@@ -1,4 +1,4 @@
-#CTL S3 Signing Utility
+# CTL S3 Signing Utility
 
 The sole purpose of this CFC is to create signed AWS S3 URLs so that you can add request headers to S3 requests.
 
