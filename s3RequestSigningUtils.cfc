@@ -3,14 +3,10 @@ CTL S3 Request Utilities
 
 This component is a utility for creating signed requests for objects in S3.
 
-Author: Brian Klaas (bklaas@jhsph.edu)
+Author: Brian Klaas (bklaas@jhu.edu)
 Created: August 1, 2013
-Copyright 2013, Brian Klaas
-
-Ideas pulled from:
-	http://docs.aws.amazon.com/AmazonS3/latest/API/RESTObjectGET.html
-	http://amazons3.riaforge.org/
-	http://www.bennadel.com/blog/2502-Uploading-Files-To-Amazon-S3-Using-Plupload-And-ColdFusion.htm
+Major refactor: June 19, 2019
+Copyright 2013, 2019 Brian Klaas
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -34,8 +30,9 @@ component output="false" hint="A utility for creating signed requests for object
 	*		- awsSecretKey = the secret key value of an Amazon IAM account that has permissions to read the requested S3 bucket.
 	*/
 	public any function init(required string awsAccessKey, required string awsSecretKey) {
-		variables.awsAccessKey = arguments.awsAccessKey;
-		variables.awsSecretKey = arguments.awsSecretKey;
+		var awsCredentials = CreateObject('java','com.amazonaws.auth.BasicAWSCredentials').init(arguments.awsAccessKey, arguments.awsSecretKey);
+		var awsStaticCredentialsProvider = CreateObject('java','com.amazonaws.auth.AWSStaticCredentialsProvider').init(awsCredentials);
+        	variables.s3 = CreateObject('java', 'com.amazonaws.services.s3.AmazonS3ClientBuilder').standard().withCredentials(awsStaticCredentialsProvider).withRegion("us-east-1").build();
 		return this;
 	}
 
@@ -51,40 +48,20 @@ component output="false" hint="A utility for creating signed requests for object
 	* 		- mimeType = string value representing the MIME type of the content
 	*/
 	public string function createSignedURL(required string s3BucketName, required string objectKey, date expiresOnDate = dateAdd("h",1,Now()), string fileNameToUse = "", boolean isAttachment = false, string mimeType = "") {
-		var fullURLWithSignature = "";
-		var signature = "";
-		var epochTime = DateDiff("s", DateConvert("utc2Local", "January 1 1970 00:00"), arguments.expiresOnDate);
-		var contentDisposition = (arguments.isAttachment) ? "response-content-disposition=attachment" : "response-content-disposition=inline";
-		// We have to create both the canonical AWS GET request string to encode as well as the URL to return
-		var awsGetRequest = "GET\n\n\n#epochTime#\n/#arguments.s3BucketName#/#arguments.objectKey#?#contentDisposition#";
-		fullURLWithSignature = "http://s3.amazonaws.com/#arguments.s3BucketName#/#arguments.objectKey#?AWSAccessKeyId=#URLEncodedFormat(variables.awsAccessKey)#&Expires=#epochTime#&#contentDisposition#";
+		var contentDisposition = (arguments.isAttachment) ? "attachment" : "inline";
 		if (len(trim(arguments.fileNameToUse))) {
-			awsGetRequest &= ";filename=" & trim(arguments.fileNameToUse);
-			fullURLWithSignature &= "%3Bfilename%3D" & trim(arguments.fileNameToUse);
+			contentDisposition &= "; filename=" & trim(arguments.fileNameToUse);
 		}
+		var responseHeaderOverrides = CreateObject('java', 'com.amazonaws.services.s3.model.ResponseHeaderOverrides')
+                .withContentDisposition(contentDisposition);
 		if (len(trim(arguments.mimeType))) {
-			awsGetRequest &= "&response-content-type=" & trim(arguments.mimeType);
-			fullURLWithSignature &= "&response-content-type=" & trim(arguments.mimeType);
+			responseHeaderOverrides.setContentType(trim(arguments.mimeType));
 		}
-		// create the HMAC hashed and binary encoded signature
-		signature = createEncodedSignature(awsGetRequest);
-		// Add the signature to the URL to return
-		fullURLWithSignature &= "&Signature=#URLEncodedFormat(signature)#";
-		return fullURLWithSignature;
-	}
-
-
-	/**
-	*	@description Takes the URL string you need to sign and encodes it per AWS specs
-	*/
-	private string function createEncodedSignature(required string awsGetRequest) {
-		// AWS requests require that you replace "\n" with "chr(10)" to get a correct digest
-		var fixedData = replace(arguments.awsGetRequest,"\n","#chr(10)#","all");
-		// Make a HmacSHA1 hash of the AWS GET request and encode it properly for AWS. We hash the GET request with our AWS Secret Key.
-		// Note that hmac() was added in CF10 and will not work in earlier versions of Adobe ColdFusion.
-		var digest = hmac(fixedData, variables.awsSecretKey, "HmacSHA1", "utf-8");
-		var signature = binaryEncode(binaryDecode(digest,"hex"),"base64");
-		return signature;
+		var generatePresignedUrlRequest = CreateObject('java', 'com.amazonaws.services.s3.model.GeneratePresignedUrlRequest')
+                .init(trim(arguments.s3BucketName), trim(arguments.objectKey))
+                .withExpiration(arguments.expiresOnDate)
+                .withResponseHeaders(responseHeaderOverrides);
+		return variables.s3.generatePresignedUrl(generatePresignedUrlRequest).toString();
 	}
 
 }
